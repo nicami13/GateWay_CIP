@@ -1,7 +1,7 @@
 # GateWay CIP
 
-Mini backend en FastAPI para recibir un dato desde un boton mediante `POST` y
-consultar el ultimo dato recibido mediante `GET`.
+Mini backend en FastAPI para recibir lecturas del PLC, normalizarlas y
+guardarlas en SQLite.
 
 ## 1. Crear el entorno virtual
 
@@ -41,22 +41,35 @@ python -m uvicorn app:app --host 0.0.0.0 --port $env:PORT --reload
 
 ## 3. Peticiones
 
-Enviar el dato del boton:
+Enviar una lectura del PLC con `POST /api/dato`:
 
 ```powershell
 Invoke-RestMethod -Method Post `
 	-Uri http://localhost:8010/api/dato `
 	-ContentType "application/json" `
-	-Body '{"dato":"boton-encendido"}'
+	-Body '{"temperatura":52.4,"ciclo":2,"nivel_cabina":"alto","nivel_t_residual":"BAJO","estado_bomba_drenado":true,"estado_bomba_dosificadora":false,"estado_resistencia":true,"moto_agitacion":false}'
 ```
 
-Consultar el ultimo dato recibido:
+Los ciclos `1`, `2` y `3` se guardan como `PRE-ENJUAGUE`, `ENJABONADO` y
+`ENJUAGUE`. Los estados aceptan booleanos JSON (`true`/`false`), `1`/`0` o
+textos `ON`/`OFF` y `TRUE`/`FALSE`, sin distinguir mayusculas. Se guardan
+normalizados como `ON`/`OFF`; los niveles tambien se convierten a mayusculas.
+
+Consultar la ultima lectura con `GET /api/dato`:
 
 ```powershell
 Invoke-RestMethod -Method Get -Uri http://localhost:8010/api/dato
 ```
 
-Tambien puedes probarlas desde `/docs`.
+Consultar historial con `GET /api/datos`. Acepta paginacion con `limit` (1 a
+1000, por defecto 100) y `offset` (por defecto 0), por ejemplo:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://localhost:8010/api/datos?limit=100&offset=0"
+```
+
+Las lecturas quedan persistidas en `gateway_cip.db`, incluso al reiniciar la
+API. Tambien puedes probar las rutas desde `/docs`.
 
 ## 4. Ejecutar en AWS
 
@@ -74,6 +87,6 @@ Abre el puerto TCP `8010` en el Security Group de la instancia. Para un
 entorno productivo, ejecuta Uvicorn con `systemd` o detras de Nginx y no uses
 `--reload`.
 
-> Nota: este ejemplo guarda el ultimo dato en memoria. Al reiniciar la API o
-> tener varias instancias, el valor se pierde; para AWS conviene persistirlo
-> en DynamoDB, RDS o Redis.
+> En una sola instancia EC2, SQLite conserva el historial en el disco local.
+> Si ejecutas varias instancias de la API, usa una base de datos compartida,
+> como RDS o DynamoDB, en lugar del archivo SQLite local.
