@@ -22,7 +22,7 @@ class DatoEntrada(BaseModel):
     estado_bomba_drenado: Any = Field(...)
     estado_bomba_dosificadora: Any = Field(...)
     estado_resistencia: Any = Field(...)
-    moto_agitacion: Any = Field(...)
+    motor_agitacion: Any = Field(...)
 
 
 DB_PATH = Path(__file__).with_name("gateway_cip.db")
@@ -48,7 +48,7 @@ def inicializar_db() -> None:
                 estado_bomba_drenado TEXT NOT NULL,
                 estado_bomba_dosificadora TEXT NOT NULL,
                 estado_resistencia TEXT NOT NULL,
-                moto_agitacion TEXT NOT NULL
+                motor_agitacion TEXT NOT NULL
             )
             """
         )
@@ -164,7 +164,7 @@ def recibir_dato(entrada: DatoEntrada) -> dict[str, Any]:
             INSERT INTO lecturas (
                 fecha_hora, temperatura, ciclo, nivel_cabina, nivel_t_residual,
                 estado_bomba_drenado, estado_bomba_dosificadora,
-                estado_resistencia, moto_agitacion
+                estado_resistencia, motor_agitacion
             ) VALUES (
                 :fecha_hora, :temperatura, :ciclo, :nivel_cabina,
                 :nivel_t_residual, :estado_bomba_drenado,
