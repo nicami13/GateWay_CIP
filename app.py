@@ -52,6 +52,14 @@ def inicializar_db() -> None:
             )
             """
         )
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(lecturas)").fetchall()
+        }
+        if "moto_agitacion" in columns and "motor_agitacion" not in columns:
+            connection.execute(
+                "ALTER TABLE lecturas RENAME COLUMN moto_agitacion TO motor_agitacion"
+            )
 
 
 def normalizar_ciclo(valor: Any) -> str:
@@ -153,7 +161,7 @@ def recibir_dato(entrada: DatoEntrada) -> dict[str, Any]:
                 entrada.estado_bomba_dosificadora
             ),
             "estado_resistencia": normalizar_estado(entrada.estado_resistencia),
-            "moto_agitacion": normalizar_estado(entrada.moto_agitacion),
+            "motor_agitacion": normalizar_estado(entrada.motor_agitacion),
         }
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -168,7 +176,7 @@ def recibir_dato(entrada: DatoEntrada) -> dict[str, Any]:
             ) VALUES (
                 :fecha_hora, :temperatura, :ciclo, :nivel_cabina,
                 :nivel_t_residual, :estado_bomba_drenado,
-                :estado_bomba_dosificadora, :estado_resistencia, :moto_agitacion
+                :estado_bomba_dosificadora, :estado_resistencia, :motor_agitacion
             )
             """,
             registro,
