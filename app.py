@@ -64,9 +64,9 @@ def inicializar_db() -> None:
 
 def normalizar_ciclo(valor: Any) -> str:
     ciclos = {
-        "1": "PRE-ENJUAGUE",
-        "2": "ENJABONADO",
-        "3": "ENJUAGUE",
+        "0": "PRE-ENJUAGUE",
+        "1": "ENJABONADO",
+        "2": "ENJUAGUE",
     }
     nombres = {
         "PRE-ENJUAGUE": "PRE-ENJUAGUE",
@@ -75,7 +75,7 @@ def normalizar_ciclo(valor: Any) -> str:
         "ENJUAGUE": "ENJUAGUE",
     }
     if isinstance(valor, bool):
-        raise ValueError("El ciclo debe ser 1, 2 o 3")
+        raise ValueError("El ciclo debe ser 0, 1 o 2")
     if isinstance(valor, float) and valor.is_integer():
         valor = int(valor)
     texto = str(valor).strip().upper()
