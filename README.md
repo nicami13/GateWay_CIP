@@ -41,7 +41,9 @@ python -m uvicorn app:app --host 0.0.0.0 --port $env:PORT --reload
 
 ## 3. Peticiones
 
-Enviar una lectura del PLC con `POST /api/dato`:
+Enviar una lectura del PLC con `POST /api/dato`. El cuerpo debe incluir los
+ocho campos requeridos. Los ciclos `0`, `1` y `2` se guardan como
+`PRE-ENJUAGUE`, `ENJABONADO` y `ENJUAGUE`, respectivamente:
 
 ```powershell
 Invoke-RestMethod -Method Post `
@@ -50,10 +52,35 @@ Invoke-RestMethod -Method Post `
 	-Body '{"temperatura":52.4,"ciclo":2,"nivel_cabina":"alto","nivel_t_residual":"BAJO","estado_bomba_drenado":true,"estado_bomba_dosificadora":false,"estado_resistencia":true,"motor_agitacion":false}'
 ```
 
-Los ciclos `1`, `2` y `3` se guardan como `PRE-ENJUAGUE`, `ENJABONADO` y
-`ENJUAGUE`. Los estados aceptan booleanos JSON (`true`/`false`), `1`/`0` o
+Los estados de equipo aceptan booleanos JSON (`true`/`false`), `1`/`0` o
 textos `ON`/`OFF` y `TRUE`/`FALSE`, sin distinguir mayusculas. Se guardan
 normalizados como `ON`/`OFF`; los niveles tambien se convierten a mayusculas.
+`nivel_t_residual` debe enviarse como el string fijo `"FALSE"` en el payload
+actual de Node-RED.
+
+En un nodo **Function** de Node-RED, mapea las variables recibidas del S7 al
+contrato HTTP y conecta la salida con un nodo **HTTP request** configurado como
+`POST http://34.226.194.178:8010/api/dato`, con cuerpo JSON:
+
+```javascript
+msg.headers = { "Content-Type": "application/json" };
+msg.payload = {
+	temperatura: Number(msg.payload.temperatura),
+	ciclo: String(msg.payload.ciclo),
+	nivel_cabina: String(msg.payload.nivel_cabina || "SIN DATO"),
+	nivel_t_residual: "FALSE",
+	estado_bomba_drenado: Boolean(msg.payload.estado_bomba_drenado),
+	estado_bomba_dosificadora: Boolean(msg.payload.estado_bomba_dosificadora),
+	estado_resistencia: Boolean(msg.payload.estado_resistencia),
+	motor_agitacion: Boolean(msg.payload.motor_agitacion)
+};
+return msg;
+```
+
+Si el nodo S7 entrega los valores dentro de otra propiedad (por ejemplo,
+`msg.payload.values`), ajusta esas rutas al formato que se ve en el nodo Debug.
+No conviertas los booleanos a texto con `String(...)`: el JSON `true`/`false`
+tambien es aceptado directamente por FastAPI.
 
 Consultar la ultima lectura con `GET /api/dato`:
 

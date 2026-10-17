@@ -83,7 +83,7 @@ def normalizar_ciclo(valor: Any) -> str:
         return ciclos[texto]
     if texto in nombres:
         return nombres[texto]
-    raise ValueError("El ciclo debe ser 1, 2 o 3")
+    raise ValueError("El ciclo debe ser 0, 1 o 2")
 
 
 def normalizar_estado(valor: Any) -> str:
