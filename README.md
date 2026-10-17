@@ -49,7 +49,7 @@ ocho campos requeridos. Los ciclos `0`, `1` y `2` se guardan como
 Invoke-RestMethod -Method Post `
 	-Uri http://localhost:8010/api/dato `
 	-ContentType "application/json" `
-	-Body '{"temperatura":52.4,"ciclo":2,"nivel_cabina":"alto","nivel_t_residual":"BAJO","estado_bomba_drenado":true,"estado_bomba_dosificadora":false,"estado_resistencia":true,"motor_agitacion":false}'
+	-Body '{"temperatura":52.4,"ciclo":2,"nivel_cabina":"alto","nivel_t_residual":"FALSE","estado_bomba_drenado":true,"estado_bomba_dosificadora":false,"estado_resistencia":true,"motor_agitacion":false}'
 ```
 
 Los estados de equipo aceptan booleanos JSON (`true`/`false`), `1`/`0` o
@@ -60,27 +60,64 @@ actual de Node-RED.
 
 En un nodo **Function** de Node-RED, mapea las variables recibidas del S7 al
 contrato HTTP y conecta la salida con un nodo **HTTP request** configurado como
-`POST http://34.226.194.178:8010/api/dato`, con cuerpo JSON:
+`POST http://34.226.194.178:8010/api/dato`, con cuerpo JSON. Este ejemplo
+acepta estados del PLC como booleanos, `0`/`1` o texto `ON`/`OFF`/`TRUE`/`FALSE`:
 
 ```javascript
+const plc = msg.payload;
+
+function estadoBooleano(valor, nombre) {
+	if (typeof valor === "boolean") return valor;
+	if (typeof valor === "number" && (valor === 0 || valor === 1)) {
+		return valor === 1;
+	}
+	if (typeof valor === "string") {
+		switch (valor.trim().toUpperCase()) {
+			case "1":
+			case "ON":
+			case "TRUE":
+				return true;
+			case "0":
+			case "OFF":
+			case "FALSE":
+				return false;
+		}
+	}
+	throw new Error(nombre + " debe ser 0/1, ON/OFF o TRUE/FALSE");
+}
+
+const temperatura = Number(plc.temperatura);
+const nivelCabina = String(plc.nivel_cabina ?? "").trim();
+if (!Number.isFinite(temperatura)) throw new Error("Temperatura invalida");
+if (!nivelCabina) throw new Error("nivel_cabina no puede estar vacio");
+
 msg.headers = { "Content-Type": "application/json" };
 msg.payload = {
-	temperatura: Number(msg.payload.temperatura),
-	ciclo: String(msg.payload.ciclo),
-	nivel_cabina: String(msg.payload.nivel_cabina || "SIN DATO"),
+	temperatura: temperatura,
+	ciclo: plc.ciclo,
+	nivel_cabina: nivelCabina,
 	nivel_t_residual: "FALSE",
-	estado_bomba_drenado: Boolean(msg.payload.estado_bomba_drenado),
-	estado_bomba_dosificadora: Boolean(msg.payload.estado_bomba_dosificadora),
-	estado_resistencia: Boolean(msg.payload.estado_resistencia),
-	motor_agitacion: Boolean(msg.payload.motor_agitacion)
+	estado_bomba_drenado: estadoBooleano(plc.estado_bomba_drenado, "estado_bomba_drenado"),
+	estado_bomba_dosificadora: estadoBooleano(plc.estado_bomba_dosificadora, "estado_bomba_dosificadora"),
+	estado_resistencia: estadoBooleano(plc.estado_resistencia, "estado_resistencia"),
+	motor_agitacion: estadoBooleano(plc.motor_agitacion, "motor_agitacion")
 };
 return msg;
 ```
 
 Si el nodo S7 entrega los valores dentro de otra propiedad (por ejemplo,
-`msg.payload.values`), ajusta esas rutas al formato que se ve en el nodo Debug.
-No conviertas los booleanos a texto con `String(...)`: el JSON `true`/`false`
-tambien es aceptado directamente por FastAPI.
+`msg.payload.values`), cambia `const plc = msg.payload;` por
+`const plc = msg.payload.values;`. Confirma las rutas viendo el mensaje completo
+en un nodo **Debug**. No uses `Boolean(valor)` para convertir valores del PLC:
+en JavaScript, `Boolean("0")` y `Boolean("false")` dan `true` porque son
+strings no vacios.
+
+En el nodo **HTTP request**, selecciona metodo `POST`, la URL anterior y retorno
+como objeto JSON. Conecta su salida a un nodo **Debug** configurado para mostrar
+el mensaje completo. Una respuesta exitosa tiene estado `201`; revisa
+`msg.statusCode` y `msg.payload`. Un `422` indica que falta un campo, un nivel
+llego vacio o un ciclo/estado tiene un valor no aceptado. Si recibes un error de
+conexion o timeout, comprueba IP publica, puerto `8010` y Security Group de AWS.
 
 Consultar la ultima lectura con `GET /api/dato`:
 

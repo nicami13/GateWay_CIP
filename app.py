@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import datetime, timezone
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -150,12 +151,21 @@ def obtener_historial(
 @app.post("/api/dato", status_code=201, tags=["datos"])
 def recibir_dato(entrada: DatoEntrada) -> dict[str, Any]:
     try:
+        nivel_cabina = entrada.nivel_cabina.strip().upper()
+        nivel_t_residual = entrada.nivel_t_residual.strip().upper()
+        if not nivel_cabina:
+            raise ValueError("nivel_cabina no puede estar vacio")
+        if not nivel_t_residual:
+            raise ValueError("nivel_t_residual no puede estar vacio")
+        if not isfinite(entrada.temperatura):
+            raise ValueError("temperatura debe ser un numero finito")
+
         registro = {
             "fecha_hora": datetime.now(timezone.utc).isoformat(),
             "temperatura": entrada.temperatura,
             "ciclo": normalizar_ciclo(entrada.ciclo),
-            "nivel_cabina": entrada.nivel_cabina.strip().upper(),
-            "nivel_t_residual": entrada.nivel_t_residual.strip().upper(),
+            "nivel_cabina": nivel_cabina,
+            "nivel_t_residual": nivel_t_residual,
             "estado_bomba_drenado": normalizar_estado(entrada.estado_bomba_drenado),
             "estado_bomba_dosificadora": normalizar_estado(
                 entrada.estado_bomba_dosificadora
