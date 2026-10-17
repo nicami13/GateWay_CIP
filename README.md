@@ -54,9 +54,10 @@ Invoke-RestMethod -Method Post `
 
 Los estados de equipo aceptan booleanos JSON (`true`/`false`), `1`/`0` o
 textos `ON`/`OFF` y `TRUE`/`FALSE`, sin distinguir mayusculas. Se guardan
-normalizados como `ON`/`OFF`; los niveles tambien se convierten a mayusculas.
-`nivel_t_residual` debe enviarse como el string fijo `"FALSE"` en el payload
-actual de Node-RED.
+normalizados como `ON`/`OFF`; `nivel_cabina` se convierte a mayusculas.
+`nivel_t_residual` es una señal invertida: `true`, `1` o `"TRUE"` significa
+`VACIO`; `false`, `0` o `"FALSE"` significa `LLENO`. La API guarda ese nivel
+como `VACIO`/`LLENO` y el dashboard muestra el tanque vacio o lleno.
 
 En un nodo **Function** de Node-RED, mapea las variables recibidas del S7 al
 contrato HTTP y conecta la salida con un nodo **HTTP request** configurado como
@@ -96,7 +97,7 @@ msg.payload = {
 	temperatura: temperatura,
 	ciclo: plc.ciclo,
 	nivel_cabina: nivelCabina,
-	nivel_t_residual: "FALSE",
+	nivel_t_residual: plc.nivel_t_residual,
 	estado_bomba_drenado: estadoBooleano(plc.estado_bomba_drenado, "estado_bomba_drenado"),
 	estado_bomba_dosificadora: estadoBooleano(plc.estado_bomba_dosificadora, "estado_bomba_dosificadora"),
 	estado_resistencia: estadoBooleano(plc.estado_resistencia, "estado_resistencia"),

@@ -19,7 +19,7 @@ class DatoEntrada(BaseModel):
     temperatura: float
     ciclo: Any = Field(...)
     nivel_cabina: str = Field(..., min_length=1)
-    nivel_t_residual: str = Field(..., min_length=1)
+    nivel_t_residual: Any = Field(...)
     estado_bomba_drenado: Any = Field(...)
     estado_bomba_dosificadora: Any = Field(...)
     estado_resistencia: Any = Field(...)
@@ -106,6 +106,31 @@ def normalizar_estado(valor: Any) -> str:
     return estado
 
 
+def normalizar_nivel_t_residual(valor: Any) -> str:
+    if isinstance(valor, bool):
+        return "VACIO" if valor else "LLENO"
+    if isinstance(valor, (int, float)) and valor in (0, 1):
+        return "VACIO" if valor == 1 else "LLENO"
+
+    nivel = str(valor).strip().upper()
+    niveles_binarios = {
+        "TRUE": "VACIO",
+        "1": "VACIO",
+        "VACIO": "VACIO",
+        "EMPTY": "VACIO",
+        "FALSE": "LLENO",
+        "0": "LLENO",
+        "LLENO": "LLENO",
+        "FULL": "LLENO",
+    }
+    normalizado = niveles_binarios.get(nivel)
+    if normalizado is None:
+        raise ValueError(
+            "nivel_t_residual debe ser true/false, 1/0, VACIO o LLENO"
+        )
+    return normalizado
+
+
 def serializar_lectura(row: sqlite3.Row) -> dict[str, Any]:
     return dict(row)
 
@@ -152,11 +177,9 @@ def obtener_historial(
 def recibir_dato(entrada: DatoEntrada) -> dict[str, Any]:
     try:
         nivel_cabina = entrada.nivel_cabina.strip().upper()
-        nivel_t_residual = entrada.nivel_t_residual.strip().upper()
+        nivel_t_residual = normalizar_nivel_t_residual(entrada.nivel_t_residual)
         if not nivel_cabina:
             raise ValueError("nivel_cabina no puede estar vacio")
-        if not nivel_t_residual:
-            raise ValueError("nivel_t_residual no puede estar vacio")
         if not isfinite(entrada.temperatura):
             raise ValueError("temperatura debe ser un numero finito")
 

@@ -83,6 +83,8 @@ st.markdown(
     .tank { width:30px; height:62px; border:2px solid #93a39a; border-radius:5px 5px 8px 8px; padding:3px; display:flex; align-items:flex-end; background:#f6f8f5; }
     .tank-fill { width:100%; background:#68a98a; border-radius:2px 2px 5px 5px; }
     .tank-fill.low { background:#d99a4c; }
+    .tank-fill.empty { background:#d99a4c; }
+    .tank-fill.full { background:#68a98a; }
     .tank-copy strong { display:block; font:600 1.35rem 'Barlow Condensed',sans-serif; }
     .tank-copy small { color:var(--muted); font-size:.68rem; }
     .device-card { height:177px; padding:1rem; background:#fff; border:1px solid var(--line); border-radius:7px; display:flex; flex-direction:column; justify-content:space-between; }
@@ -243,8 +245,14 @@ def mostrar_monitor() -> None:
 
     def render_level(label: str, value: str) -> str:
         level = value.strip().upper()
-        fill = {"BAJO": 24, "MEDIO": 58, "ALTO": 88}.get(level, 0)
-        fill_class = "low" if level == "BAJO" else ""
+        level = {
+            "TRUE": "VACIO",
+            "1": "VACIO",
+            "FALSE": "LLENO",
+            "0": "LLENO",
+        }.get(level, level)
+        fill = {"BAJO": 24, "MEDIO": 58, "ALTO": 88, "LLENO": 100}.get(level, 0)
+        fill_class = "empty" if level == "VACIO" else "full" if level == "LLENO" else "low" if level == "BAJO" else ""
         return f"""<div class="info-card"><div class="info-label">{label}</div>
           <div class="tank-row"><div class="tank"><div class="tank-fill {fill_class}" style="height:{fill}%"></div></div>
           <div class="tank-copy"><strong>{level}</strong><small>Nivel detectado</small></div></div></div>"""
