@@ -41,23 +41,24 @@ python -m uvicorn app:app --host 0.0.0.0 --port $env:PORT --reload
 
 ## 3. Peticiones
 
-Enviar una lectura del PLC con `POST /api/dato`. El cuerpo debe incluir los
-ocho campos requeridos. Los ciclos `0`, `1` y `2` se guardan como
+Enviar una lectura del PLC con `POST /api/dato`. El cuerpo incluye los campos
+del PLC mapeados al contrato de la API; `nivel_t_residual` es opcional porque
+no aparece en el payload observado. Los ciclos `0`, `1` y `2` se guardan como
 `PRE-ENJUAGUE`, `ENJABONADO` y `ENJUAGUE`, respectivamente:
 
 ```powershell
 Invoke-RestMethod -Method Post `
 	-Uri http://localhost:8010/api/dato `
 	-ContentType "application/json" `
-	-Body '{"temperatura":52.4,"ciclo":2,"nivel_cabina":"alto","nivel_t_residual":"FALSE","estado_bomba_drenado":true,"estado_bomba_dosificadora":false,"estado_resistencia":true,"motor_agitacion":false}'
+	-Body '{"temperatura":34.7,"ciclo":1,"nivel_cabina":false,"estado_bomba_drenado":false,"estado_bomba_dosificadora":false,"estado_resistencia":false,"motor_agitacion":false}'
 ```
 
 Los estados de equipo aceptan booleanos JSON (`true`/`false`), `1`/`0` o
 textos `ON`/`OFF` y `TRUE`/`FALSE`, sin distinguir mayusculas. Se guardan
-normalizados como `ON`/`OFF`; `nivel_cabina` se convierte a mayusculas.
-`nivel_t_residual` es una señal invertida: `true`, `1` o `"TRUE"` significa
-`VACIO`; `false`, `0` o `"FALSE"` significa `LLENO`. La API guarda ese nivel
-como `VACIO`/`LLENO` y el dashboard muestra el tanque vacio o lleno.
+normalizados como `ON`/`OFF`. La señal `nivel_cabina` del PLC es invertida:
+`true`, `1` o `"TRUE"` significa `VACIO`; `false`, `0` o `"FALSE"` significa
+`LLENO`. La API guarda ese nivel como `VACIO`/`LLENO`. Si no se manda
+`nivel_t_residual`, queda como `SIN DATO`.
 
 En un nodo **Function** de Node-RED, mapea las variables recibidas del S7 al
 contrato HTTP y conecta la salida con un nodo **HTTP request** configurado como
@@ -87,35 +88,87 @@ function estadoBooleano(valor, nombre) {
 	throw new Error(nombre + " debe ser 0/1, ON/OFF o TRUE/FALSE");
 }
 
-const temperatura = Number(plc.temperatura);
-const nivelCabina = String(plc.nivel_cabina ?? "").trim();
-if (!Number.isFinite(temperatura)) throw new Error("Temperatura invalida");
-if (!nivelCabina) throw new Error("nivel_cabina no puede estar vacio");
+function nivelCabinaBooleano(valor) {
+	if (typeof valor === "boolean") return valor;
+	if (typeof valor === "number" && (valor === 0 || valor === 1)) {
+		return valor === 1;
+	}
+	if (typeof valor === "string") {
+		switch (valor.trim().toUpperCase()) {
+			case "TRUE":
+			case "1":
+			case "VACIO":
+				return true;
+			case "FALSE":
+			case "0":
+			case "LLENO":
+				return false;
+		}
+	}
+	throw new Error("Nivel_Cabina debe ser true/false, 1/0 o VACIO/LLENO");
+}
 
-msg.headers = { "Content-Type": "application/json" };
-msg.payload = {
-	temperatura: temperatura,
-	ciclo: plc.ciclo,
-	nivel_cabina: nivelCabina,
-	nivel_t_residual: plc.nivel_t_residual,
-	estado_bomba_drenado: estadoBooleano(plc.estado_bomba_drenado, "estado_bomba_drenado"),
-	estado_bomba_dosificadora: estadoBooleano(plc.estado_bomba_dosificadora, "estado_bomba_dosificadora"),
-	estado_resistencia: estadoBooleano(plc.estado_resistencia, "estado_resistencia"),
-	motor_agitacion: estadoBooleano(plc.motor_agitacion, "motor_agitacion")
-};
-return msg;
+try {
+	if (!plc || typeof plc !== "object") {
+		throw new Error("msg.payload no contiene el objeto del PLC");
+	}
+	if (plc.Temperatura === undefined || plc.Temperatura === null || plc.Temperatura === "") {
+		throw new Error("Falta Temperatura");
+	}
+	if (plc.Nivel_Cabina === undefined || plc.Nivel_Cabina === null || plc.Nivel_Cabina === "") {
+		throw new Error("Falta Nivel_Cabina");
+	}
+	if (plc.ciclo === undefined || plc.ciclo === null || plc.ciclo === "") {
+		throw new Error("Falta ciclo");
+	}
+
+	const temperatura = Number(plc.Temperatura);
+	if (!Number.isFinite(temperatura)) {
+		throw new Error("Temperatura no es numerica");
+	}
+
+	const ciclo = String(plc.ciclo).trim();
+	if (!["0", "1", "2", "PRE-ENJUAGUE", "PRE ENJUAGUE", "ENJABONADO", "ENJUAGUE"]
+		.some(valor => valor === ciclo.toUpperCase())) {
+		throw new Error("ciclo debe ser 0, 1 o 2");
+	}
+	const nivelCabina = nivelCabinaBooleano(plc.Nivel_Cabina);
+	node.warn("Nivel_Cabina recibido=" + JSON.stringify(plc.Nivel_Cabina) +
+		" tipo=" + typeof plc.Nivel_Cabina + " enviado=" + nivelCabina);
+
+	msg.method = "POST";
+	msg.url = "http://34.226.194.178:8010/api/dato";
+	msg.headers = { "Content-Type": "application/json" };
+	msg.payload = {
+		temperatura: temperatura,
+		ciclo: ciclo,
+		nivel_cabina: nivelCabina,
+		estado_bomba_drenado: estadoBooleano(plc.Estado_bomba_drenado, "Estado_bomba_drenado"),
+		estado_bomba_dosificadora: estadoBooleano(plc.Estado_bomba_dosificadora, "Estado_bomba_dosificadora"),
+		estado_resistencia: estadoBooleano(plc.Estado_resistencia, "Estado_resistencia"),
+		motor_agitacion: estadoBooleano(plc.motor_agitacion, "motor_agitacion")
+	};
+	return msg;
+} catch (error) {
+	node.error("No se envio lectura a FastAPI: " + error.message, msg);
+	return null;
+}
 ```
 
-Si el nodo S7 entrega los valores dentro de otra propiedad (por ejemplo,
+El ejemplo corresponde al objeto visto en Debug: `Temperatura`, `Nivel_Cabina`,
+`Estado_bomba_drenado`, `Estado_bomba_dosificadora`, `Estado_resistencia`,
+`ciclo` y `motor_agitacion`. Si el nodo S7 entrega los valores dentro de otra propiedad (por ejemplo,
 `msg.payload.values`), cambia `const plc = msg.payload;` por
 `const plc = msg.payload.values;`. Confirma las rutas viendo el mensaje completo
 en un nodo **Debug**. No uses `Boolean(valor)` para convertir valores del PLC:
 en JavaScript, `Boolean("0")` y `Boolean("false")` dan `true` porque son
 strings no vacios.
 
-En el nodo **HTTP request**, selecciona metodo `POST`, la URL anterior y retorno
-como objeto JSON. Conecta su salida a un nodo **Debug** configurado para mostrar
-el mensaje completo. Una respuesta exitosa tiene estado `201`; revisa
+Conecta el Function directamente al nodo **HTTP request**. Configura el nodo
+para usar `msg.method` y `msg.url` (o fija el metodo `POST` y la misma URL en el
+nodo), y selecciona retorno como objeto JSON. Conecta su salida a un nodo
+**Debug** configurado para mostrar el mensaje completo. Una respuesta exitosa
+tiene estado `201`; revisa
 `msg.statusCode` y `msg.payload`. Un `422` indica que falta un campo, un nivel
 llego vacio o un ciclo/estado tiene un valor no aceptado. Si recibes un error de
 conexion o timeout, comprueba IP publica, puerto `8010` y Security Group de AWS.

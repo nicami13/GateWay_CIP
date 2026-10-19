@@ -18,8 +18,8 @@ app = FastAPI(
 class DatoEntrada(BaseModel):
     temperatura: float
     ciclo: Any = Field(...)
-    nivel_cabina: str = Field(..., min_length=1)
-    nivel_t_residual: Any = Field(...)
+    nivel_cabina: Any = Field(...)
+    nivel_t_residual: Any = None
     estado_bomba_drenado: Any = Field(...)
     estado_bomba_dosificadora: Any = Field(...)
     estado_resistencia: Any = Field(...)
@@ -131,6 +131,20 @@ def normalizar_nivel_t_residual(valor: Any) -> str:
     return normalizado
 
 
+def normalizar_nivel_cabina(valor: Any) -> str:
+    if isinstance(valor, (bool, int, float)):
+        return normalizar_nivel_t_residual(valor)
+
+    nivel = str(valor).strip().upper()
+    if nivel in {"TRUE", "1", "FALSE", "0", "VACIO", "EMPTY", "LLENO", "FULL"}:
+        return normalizar_nivel_t_residual(nivel)
+    if nivel in {"BAJO", "MEDIO", "ALTO"}:
+        return nivel
+    raise ValueError(
+        "nivel_cabina debe ser true/false, 1/0, VACIO/LLENO o BAJO/MEDIO/ALTO"
+    )
+
+
 def serializar_lectura(row: sqlite3.Row) -> dict[str, Any]:
     return dict(row)
 
@@ -176,10 +190,12 @@ def obtener_historial(
 @app.post("/api/dato", status_code=201, tags=["datos"])
 def recibir_dato(entrada: DatoEntrada) -> dict[str, Any]:
     try:
-        nivel_cabina = entrada.nivel_cabina.strip().upper()
-        nivel_t_residual = normalizar_nivel_t_residual(entrada.nivel_t_residual)
-        if not nivel_cabina:
-            raise ValueError("nivel_cabina no puede estar vacio")
+        nivel_cabina = normalizar_nivel_cabina(entrada.nivel_cabina)
+        nivel_t_residual = (
+            normalizar_nivel_t_residual(entrada.nivel_t_residual)
+            if entrada.nivel_t_residual is not None
+            else "SIN DATO"
+        )
         if not isfinite(entrada.temperatura):
             raise ValueError("temperatura debe ser un numero finito")
 
